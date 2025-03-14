@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Restricted Map Area</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw"></script>
+
+    <link rel="manifest" href="manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js')
+                .then(() => console.log("Service Worker Registered"));
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+        }
+
+        #map-container {
+            flex: 1;
+            padding: 10px;
+        }
+
+        #map {
+            width: 100%;
+            height: 90vh;
+            border-radius: 10px;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #infoPanel {
+            width: 25%;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.15);
+            margin: 10px;
+            text-align: center;
+        }
+
+        #polygonColor {
+            font-weight: bold;
+            padding: 5px;
+            display: inline-block;
+            border-radius: 4px;
+            background: #f1f1f1;
+        }
+
+        .polygon-label {
+            font-size: 14px;
+            color: black;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 4px 8px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: bold;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="map-container">
+        <div id="map"></div>
+        <div id="controls">
+            <button onclick="savePolygons()">Save Polygons</button>
+            <button onclick="toggleEditMode()" id="editToggle">Enable Edit Mode</button>
+        </div>
+    </div>
+
+    <div id="infoPanel">
+        <h3>Polygon Information</h3>
+        <p><strong>Name:</strong> <span id="polygonName">N/A</span></p>
+        <p><strong>Color:</strong> <span id="polygonColor">N/A</span></p>
+    </div>
+
+    <script>
+        var bounds = [
+            [14.027557, 121.278938],
+            [14.127557, 121.378938]
+        ];
+
+        var map = L.map('map', {
+            center: [14.077557, 121.328938],
+            zoom: 15,
+            minZoom: 13,
+            maxBounds: bounds,
+            maxBoundsViscosity: 1.0
+        });
+
+        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
+        var GoogleSatellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { attribution: 'Satellite' });
+
+        var baseMaps = {
+            "OSM": osm,
+            "Satellite": GoogleSatellite
+        };
+
+        L.control.layers(baseMaps).addTo(map);
+        osm.addTo(map);
+
+        var drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+
+        var drawControl = new L.Control.Draw({
+            edit: { featureGroup: drawnItems },
+            draw: {
+                polygon: true,
+                polyline: false,
+                rectangle: false,
+                circle: false,
+                marker: false
+            }
+        });
+
+        var editMode = false;
+
+        function toggleEditMode() {
+            editMode = !editMode;
+            var button = document.getElementById("editToggle");
+            if (editMode) {
+                map.addControl(drawControl);
+                button.innerText = "Disable Edit Mode";
+            } else {
+                map.removeControl(drawControl);
+                button.innerText = "Enable Edit Mode";
+            }
+        }
+
+        function getCentroid(latlngs) {
+            let latSum = 0, lngSum = 0, count = 0;
+            latlngs.forEach((latlng) => {
+                latSum += latlng.lat;
+                lngSum += latlng.lng;
+                count++;
+            });
+            return L.latLng(latSum / count, lngSum / count);
+        }
+
+        map.on(L.Draw.Event.CREATED, function (event) {
+            var layer = event.layer;
+            drawnItems.addLayer(layer);
+
+            var popupContent = document.createElement("div");
+
+            var input = document.createElement("input");
+            input.type = "text";
+            input.placeholder = "Enter field name...";
+            input.style.width = "140px";
+            input.style.padding = "5px";
+            input.style.marginBottom = "5px";
+            input.style.border = "1px solid #ccc";
+
+            var colorPicker = document.createElement("input");
+            colorPicker.type = "color";
+            colorPicker.value = "#ff0000";
+            colorPicker.style.marginLeft = "5px";
+
+            var button = document.createElement("button");
+            button.innerText = "Save";
+            button.style.marginLeft = "5px";
+
+            popupContent.appendChild(input);
+            popupContent.appendChild(colorPicker);
+            popupContent.appendChild(button);
+
+            layer.bindPopup(popupContent).openPopup();
+
+            button.addEventListener("click", function () {
+                var fieldName = input.value.trim();
+                var selectedColor = colorPicker.value;
+                if (fieldName) {
+                    layer.feature = layer.feature || {};
+                    layer.feature.properties = layer.feature.properties || {};
+                    layer.feature.properties.name = fieldName;
+                    layer.feature.properties.color = selectedColor;
+                    layer.setStyle({ color: selectedColor });
+
+                    layer.closePopup();
+
+                    var centroid = getCentroid(layer.getLatLngs()[0]);
+                    var label = L.marker(centroid, {
+                        icon: L.divIcon({
+                            className: 'polygon-label',
+                            html: `<b>${fieldName}</b>`,
+                            iconSize: [100, 30]
+                        })
+                    }).addTo(map);
+                    layer.labelMarker = label;
+
+                    layer.on("click", function () {
+                        document.getElementById("polygonName").innerText = fieldName;
+                        document.getElementById("polygonColor").innerText = selectedColor;
+                        document.getElementById("polygonColor").style.color = selectedColor;
+                    });
+                }
+            });
+        });
+
+        function savePolygons() {
+            var geojsonData = drawnItems.toGeoJSON();
+            console.log("Polygon Data:", JSON.stringify(geojsonData, null, 2));
+        }
+    </script>
+
+</body>
+
+</html>
